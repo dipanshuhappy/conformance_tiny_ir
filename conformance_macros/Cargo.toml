@@ -1,0 +1,14 @@
+[package]
+name = "conformance_macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sugar attrs that desugar into conformance_lang IR"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"

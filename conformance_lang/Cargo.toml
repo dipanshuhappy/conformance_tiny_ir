@@ -1,0 +1,13 @@
+[package]
+name = "conformance_lang"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tiny conformance IR: Schema / Field / Invariant / Predicate / Compose / Eval"
+
+[dependencies]
+thiserror = "1"
+syn = { version = "2", features = ["full"] }
+
+[dev-dependencies]
+conformance_macros = { path = "../conformance_macros" }
