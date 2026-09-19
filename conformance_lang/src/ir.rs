@@ -1,8 +1,62 @@
 //! Core IR — Schema · Field · Invariant · Predicate · Compose · Eval.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::sync::Arc;
 
-use crate::absval::AbsVal;
+use crate::absval::{AbsVal, ApplyErr, Photo};
+
+/// Type-erased `Refine a`. Typed at the call: `refine(|x|)`.
+#[derive(Clone)]
+pub struct RefineFn {
+    apply: Arc<dyn Fn(&AbsVal) -> Result<(), ApplyErr> + Send + Sync>,
+}
+
+impl RefineFn {
+    pub fn new<A: Photo>(check: impl Fn(&A::Arg) -> bool + Send + Sync + 'static) -> Self {
+        Self {
+            apply: Arc::new(move |val| A::apply(val, |x| check(x))),
+        }
+    }
+
+    pub fn run(&self, val: &AbsVal) -> Result<(), ApplyErr> {
+        (self.apply)(val)
+    }
+}
+
+impl fmt::Debug for RefineFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "refine")
+    }
+}
+
+/// Typed `Refine a`. Erase to `Invariant` only at the Schema boundary.
+#[derive(Clone)]
+pub struct Refine<A: ?Sized> {
+    inv: Invariant,
+    _a: std::marker::PhantomData<A>,
+}
+
+impl<A: ?Sized> Refine<A> {
+    pub(crate) fn pack(inv: Invariant) -> Self {
+        Self {
+            inv,
+            _a: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<A: ?Sized> From<Refine<A>> for Invariant {
+    fn from(r: Refine<A>) -> Self {
+        r.inv
+    }
+}
+
+impl<A: ?Sized> fmt::Debug for Refine<A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inv.fmt(f)
+    }
+}
 
 /// Parent type under check (`Msg`, `E1`, …).
 #[derive(Debug, Clone)]
@@ -11,6 +65,18 @@ pub struct Schema {
     /// Optional fixed-width record length (TRACS-style).
     pub width: Option<usize>,
     pub fields: Vec<Field>,
+    /// `#[when(P, rewrite I)]` — only these open pre/write. Empty = one photo.
+    pub rewrites: Vec<Rewrite>,
+}
+
+/// `when(P, rewrite I)` at a field `=`.
+///
+/// `pred` reads **pre**. `then` reads **write** as `field`.
+#[derive(Debug, Clone)]
+pub struct Rewrite {
+    pub field: String,
+    pub pred: Predicate,
+    pub then: Invariant,
 }
 
 /// Named slot inside a Schema.
@@ -56,6 +122,12 @@ pub enum Invariant {
     Absent,
     /// Observed form (scalar string vs array).
     Shape(Form),
+    /// List elements are pairwise distinct (`Known` strings).
+    Unique,
+    /// Domain `Refine a` (`refine(|x|)` / `#[refine(path)]`).
+    Refine(RefineFn),
+    /// Walk an inner Schema on a record photo (and each record in an array).
+    Nested(Box<Schema>),
     /// Geometry: 1-based start.
     At(usize),
     /// Geometry: width in characters.
@@ -80,8 +152,18 @@ pub enum Form {
 /// `ctx → Bool`
 #[derive(Debug, Clone)]
 pub enum Predicate {
-    Eq { field: String, lit: String },
-    In { field: String, lits: Vec<String> },
+    Eq {
+        field: String,
+        lit: String,
+    },
+    In {
+        field: String,
+        lits: Vec<String>,
+    },
+    /// Field is present (not Absent). Unobserved is Undecidable.
+    Defined {
+        field: String,
+    },
     And(Vec<Predicate>),
     Or(Vec<Predicate>),
     Not(Box<Predicate>),
@@ -128,7 +210,19 @@ impl ValueCtx {
     }
 
     pub fn array(self, field: &str) -> Self {
-        self.write_value(field, AbsVal::Array)
+        self.array_of(field, Vec::new())
+    }
+
+    pub fn array_of(self, field: &str, xs: Vec<AbsVal>) -> Self {
+        self.write_value(field, AbsVal::Array(xs))
+    }
+
+    pub fn record(
+        self,
+        field: &str,
+        fields: impl IntoIterator<Item = (String, AbsVal)>,
+    ) -> Self {
+        self.write_value(field, AbsVal::Record(fields.into_iter().collect()))
     }
 
     pub fn one_of(self, field: &str, values: impl IntoIterator<Item = impl Into<String>>) -> Self {

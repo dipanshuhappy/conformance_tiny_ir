@@ -11,12 +11,21 @@ mod observe;
 mod stdlib;
 mod unfold;
 
-pub use absval::AbsVal;
-pub use check::{eval_schema, CheckReport, Finding, FindingKind};
-pub use ir::{Compose, Field, Form, Invariant, Locator, Predicate, Schema, ValueCtx, WireMeta};
+pub use absval::{AbsVal, ApplyErr, Photo, PhotoArg};
+pub use check::{
+    eval_rewrite, eval_rewrites, eval_schema, CheckReport, Finding, FindingKind, Skip,
+};
+pub use ir::{
+    Compose, Field, Form, Invariant, Locator, Predicate, Refine, RefineFn, Rewrite, Schema,
+    ValueCtx, WireMeta,
+};
 pub use observe::{observe, Fact};
-pub use stdlib::{absent, at, defined, one_of, pred_eq, pred_in, shape, when, width};
-pub use unfold::{eval_unfold, eval_unfold_named, unfold, Observation};
+pub use stdlib::{
+    absent, all, at, defined, nested, one_of, or_absent, pred_defined, pred_eq, pred_in, pred_not,
+    refine,
+    refine_on, rewrite, shape, unique, when, width,
+};
+pub use unfold::{eval_crate, eval_tree, eval_unfold, eval_unfold_named, unfold, Observation};
 
 /// Convenience: Msg toy schema used in README / tests.
 pub fn msg_toy_schema() -> Schema {
@@ -37,5 +46,6 @@ pub fn msg_toy_schema() -> Schema {
                 wire: None,
             },
         ],
+        rewrites: vec![],
     }
 }

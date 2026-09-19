@@ -1,0 +1,8 @@
+---
+description: Load tiny-ir-work before and after every code or DESIGN change
+alwaysApply: true
+---
+
+# Tiny IR
+
+Read `.cursor/skills/tiny-ir-work/SKILL.md` before editing code or DESIGN.md. Read it again after the edit, before claiming done. Law: DESIGN.md. This repo is the language.

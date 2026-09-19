@@ -1,6 +1,7 @@
-//! Generated `#[test]`s from `#[conformance_macros::transition]` run as part of this file.
+//! Expand-time `compile_error!` from `#[transition]` / `#[except]` — this file
+//! compiling *is* the check.
 
-use conformance_macros::{transition, Schema};
+use conformance_macros::{except, transition, Schema};
 
 #[allow(dead_code)]
 #[derive(Schema)]
@@ -23,6 +24,14 @@ fn for_kind(mut m: Msg) -> Msg {
 
 #[allow(dead_code)]
 fn helper(mut m: Msg) -> Msg {
+    m.name = None;
+    m
+}
+
+#[allow(dead_code)]
+#[except("intentional illegal fixture")]
+fn compute_hi(mut m: Msg) -> Msg {
+    m.kind = "hi".into();
     m.name = None;
     m
 }
