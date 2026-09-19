@@ -1,53 +1,12 @@
 # conformance_tiny_ir
 
-Tiny conformance engine: **Schema · Field · Invariant · Predicate · Compose · Eval**.
+Schema = legal region of state. Observe fills a photo. Eval scores it.
 
-Schema = **legal region of state**. Observe fills a `ValueCtx`. Eval scores it. No AST hunt for `Msg { … }` or `fn -> Msg`.
+**Schema · Field · Locator · Invariant · Predicate · Compose · Eval**
 
-## Primitives
+This repo is the language. Ampere / recon hang their domains on it.
 
-| Name | Role |
-|------|------|
-| Schema | Legal states of a type |
-| Field | Slot + locator |
-| Invariant | `(state, field) → Pass \| Fail` |
-| Predicate | `state → Bool` (gates an invariant) |
-| Compose | `when` / `all` / `any` (on `Invariant`) |
-| Eval | Score one photo (`eval_schema`). `rewrite` is the only thing that opens pre/write (`eval_rewrite`) |
-
-Stdlib: `one_of`, `defined`, `when`, `at`, `width`, `shape`, `refine`, `all`, `pred_eq`, `pred_in`, `rewrite`. Domain: `fn eci() -> Refine<str> { refine(|s| …) }` + `#[refine(eci)]`, or `#[refine(|s| …)]` on one slot. Erase at Schema.
-
-Observe = fold of `M` (`ValueCtx → ValueCtx`). Unfold is one backend of that fold.
-
-## Quick run
-
-```bash
-cd ~/Desktop/projects/conformance_tiny_ir
-cargo build          # Schema / transition Fail → compile_error
-cargo test -p conformance_lang
-```
-
-## Toy (desugared IR)
-
-```text
-Schema Msg
-  Field kind ⊢ Invariant oneOf(["hi","bye"])
-  Field name ⊢ when(Predicate(kind=="hi"), Invariant defined)
-```
-
-Illegal **state** (however you built it):
-
-```text
-kind = "hi", name absent  →  Fail: defined
-```
-
-```rust
-eval_schema(&schema, &ValueCtx::default().lit("kind", "hi").absent("name"), None)
-```
-
-Unobserved is not Absent: `.lit("kind", "hi")` with no name fact is **Undecidable**, not Fail.
-
-## Toy (sugar)
+## The example
 
 ```rust
 use conformance_macros::Schema;
@@ -59,82 +18,137 @@ struct Msg {
     #[required_if(kind = "hi")]
     name: Option<String>,
 }
-
-// Msg::conformance_schema() → same IR
 ```
 
-`#[enum_]` is `one_of`. On `Option`, sugar is `|| None` (`or_absent`). Required fields stay pure `one_of`.
+That is one region: `kind ∈ {hi, bye}`; `kind = hi ⇒ name` defined.
 
-First real schema (RReq). `required_if` is the 2.3.1 **photo**. `when` + `rewrite` is the pre-2.3.1 **edit**:
+```text
+kind = "hi", name absent  →  Fail (defined)
+kind = "bye", name absent →  Pass
+kind = "hi"               →  Undecidable (name unobserved, not Absent)
+```
+
+`#[enum_]` is `one_of`. On `Option`, sugar is `|| None`. The checker never sees the attrs — only the Schema.
+
+## Detected anywhere
+
+The illegal tuple is the **ending photo**, not `Msg { kind: "hi", name: None }`. Same Fail if you build it with assigns, a helper, or an `if` arm.
 
 ```rust
-#[derive(Schema)]
-struct RReq {
-    #[enum_("2.0.0", "2.1.0", "2.2.0", "2.3.1")]
-    message_version: String,
-    #[enum_("01", "02", "03", "04", "05", "06", "07", "08", "09", "10")]
-    /// Pre-2.3.1 Table A.4: CReq/CRes error cancels 09/10 remap to 06.
-    #[when(message_version != "2.3.1" && "09" or "10", rewrite "06")]
-    challenge_cancel: Option<String>,
-    #[required_if(message_version = "2.3.1", challenge_cancel = ["09", "10"])]
-    #[when(message_version != "2.3.1", rewrite None)]
-    challenge_error_reporting: Option<String>,
-}
-```
-
-Bare `"09" or "10"` is this field. `&&` = And. `rewrite` opens pre/write. `#[when(P, one_of(...))]` (any I except `rewrite`) is the photo — leftover 09/10 on 2.2, not an edit.
-
-`#[derive(Schema)]` Unfolds `src/` at expand time (`compile_error!` on Fail). Mute a fn with `#[except("why")]` (site only; follow still enters). `#[transition]` is optional extra on one fn/`impl`/method.
-
-## Observe / Unfold
-
-```rust
-observe(&schema, |f| match f.locator.key() {
-    "tracs_amount" => Fact::Wire { pos: 37, len: 11 },
-    _ => Fact::Unknown,
-})
-
-eval_unfold(&schema, r#"
-    fn for_kind(mut m: Msg) -> Msg {
-        if m.kind == "hi" { m.name = None; return m; }
-        m
-    }
-"#)
-```
-
-Unfold path-splits `if` / `matches!`, follows callees that rewrite the same value, and evals each arm. Layout JSON does not go through Unfold.
-
-Hook it to a function; illegal tuples fail `cargo build`:
-
-```toml
-conformance = { package = "conformance_macros", path = "../conformance_tiny_ir/conformance_macros" }
-conformance_lang = { path = "../conformance_tiny_ir/conformance_lang" }
-```
-
-```rust
-#[conformance::transition]
-fn for_kind(mut m: Msg) -> Msg { /* … */ }
-
-#[conformance::except("fixture for the illegal tuple")]
 fn compute_hi(mut m: Msg) -> Msg {
     m.kind = "hi".into();
+    m.name = None;           // Fail: hi ⇒ name defined
+    m
+}
+
+fn for_kind(mut m: Msg) -> Msg {
+    if m.kind == "hi" {
+        m.name = None;       // Fail on this arm
+        return m;
+    }
+    helper(m)                // else: kind is not hi — name None is fine
+}
+
+fn helper(mut m: Msg) -> Msg {
     m.name = None;
     m
 }
 
-#[conformance::transition]
-impl Msg {
-    fn for_protocol(mut self) -> Self { /* … */ }
+fn sneak(mut m: Msg) -> Msg {
+    helper(do_m(m))          // follow: do_m writes hi + None → Fail here too
+}
+
+fn do_m(mut m: Msg) -> Msg {
+    m.kind = "hi".into();
+    m.name = None;
+    m
 }
 ```
 
-Same file as callees so Unfold can follow them.
+`#[derive(Schema)]` Unfolds `{crate}/src` at expand time. A Known-illegal photo is `compile_error!` — `cargo build` is the check. Path-split: do not union `if` arms. Follow enters callees (same file, depth 8). `#[except("why")]` mutes **that fn as a site**; follow from other sites still enters it.
 
-## Verify ≠ match attrs
+Hand photo (tests / live JSON) is the same Eval:
 
-Observed facts (literals, absent, wire pos/len) are evaluated against Invariants. Fail if `observed` breaks the Invariant — not if attribute text mismatches.
+```rust
+eval_schema(&Msg::conformance_schema(),
+    &ValueCtx::default().lit("kind", "hi").absent("name"),
+    None)
+```
+
+Unknown / missing keys are Undecidable, not Fail.
+
+## Complex domains live in the consumer
+
+The kernel does not grow `uuid` / `eci` arms. A refine is `a → Score`. Lift picks `a` from the slot (`String`, each of a list, `Absent | T`). Ampere (or this test crate) owns the filter:
+
+```rust
+use conformance_lang::{refine, Refine};
+
+fn eci() -> Refine<str> {
+    refine(|s| s.chars().count() == 2 && s.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn uuid() -> Refine<str> {
+    refine(|s| s.len() == 36 /* … */)
+}
+
+#[derive(Schema)]
+struct RReq {
+    #[enum_("2.0.0", "2.1.0", "2.2.0", "2.3.1")]
+    message_version: String,
+
+    #[refine(eci)]
+    eci: Option<String>,
+
+    #[refine(uuid)]
+    three_ds_server_trans_id: String,
+
+    /// This slot only — same refine, no named fn.
+    #[refine(|s| s.chars().count() == 2)]
+    interaction_counter: String,
+
+    /// Photo: leftover 09/10 illegal on 2.2. Rewrite: the edit at `=`.
+    #[enum_("01", "02", "03", "04", "05", "06", "07", "08", "09", "10")]
+    #[when(message_version != "2.3.1" && "09" or "10", rewrite "06")]
+    #[when(message_version != "2.3.1", one_of("01", "03", "04", "05", "06", "07", "08"))]
+    challenge_cancel: Option<String>,
+}
+```
+
+`#[refine(eci)]` is `let r: Refine<str> = eci()` then erase to `Invariant` on the Schema. Option peels to `or_absent`. Expand-time `compile_error!` only scores **data** (`one_of`, `defined`, …). A domain closure is runtime Eval.
+
+A Schema struct is walked by default (`report.code`). `#[leaf]` opts out. Sums are not nested Schemas.
+
+```rust
+#[derive(Schema)]
+struct Erro {
+    #[enum_("01", "02")]
+    code: String,
+}
+
+#[derive(Schema)]
+struct Wrap {
+    report: Option<Erro>,   // walks Erro; Absent skips
+}
+```
+
+## Use from GitHub
+
+```toml
+conformance_lang = { git = "https://github.com/dipanshuhappy/conformance_tiny_ir", package = "conformance_lang" }
+conformance_macros = { git = "https://github.com/dipanshuhappy/conformance_tiny_ir", package = "conformance_macros" }
+```
+
+Pin `rev` when you want a freeze. You need `conformance_lang` if you call `eval_schema` / `refine` yourself; `#[derive(Schema)]` needs the macros crate.
+
+```bash
+cargo build          # Fail → compile_error
+cargo test -p conformance_lang
+```
 
 ## Crates
 
-- `conformance_lang` — IR, Observe, Unfold, `eval_schema`
+- `conformance_lang` — IR, Observe, Unfold, Eval
 - `conformance_macros` — `#[derive(Schema)]`, `#[transition]`, `#[except]`
+
+Law: [DESIGN.md](DESIGN.md).
