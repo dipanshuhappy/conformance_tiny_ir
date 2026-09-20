@@ -1,12 +1,19 @@
 # conformance_tiny_ir
 
-Schema = legal region of state. Observe fills a photo. Eval scores it.
+Annotate a Rust struct. **`cargo build` fails if your code constructs an illegal value.** The same rules run at **runtime** on a filled-in instance.
 
-**Schema · Field · Locator · Invariant · Predicate · Compose · Eval**
+## Add it
 
-This repo is the language. Ampere / recon hang their domains on it.
+```toml
+conformance_lang = { git = "https://github.com/dipanshuhappy/conformance_tiny_ir", package = "conformance_lang" }
+conformance_macros = { git = "https://github.com/dipanshuhappy/conformance_tiny_ir", package = "conformance_macros" }
+```
 
-## The example
+Pin `rev` if you want a freeze.
+
+## Example
+
+`kind` is `"hi"` or `"bye"`. If `kind` is `"hi"`, `name` must be set.
 
 ```rust
 use conformance_macros::Schema;
@@ -20,135 +27,87 @@ struct Msg {
 }
 ```
 
-That is one region: `kind ∈ {hi, bye}`; `kind = hi ⇒ name` defined.
+| Value | Result |
+|---|---|
+| `kind = "hi"`, `name = Some("Ada")` | ok |
+| `kind = "bye"`, `name = None` | ok |
+| `kind = "hi"`, `name = None` | **error** |
+| `kind = "hi"` and `name` never written | not an error — only known fields are checked |
 
-```text
-kind = "hi", name absent  →  Fail (defined)
-kind = "bye", name absent →  Pass
-kind = "hi"               →  Undecidable (name unobserved, not Absent)
-```
+### Compile time
 
-`#[enum_]` is `one_of`. On `Option`, sugar is `|| None`. The checker never sees the attrs — only the Schema.
-
-## Detected anywhere
-
-The illegal tuple is the **ending photo**, not `Msg { kind: "hi", name: None }`. Same Fail if you build it with assigns, a helper, or an `if` arm.
+`#[derive(Schema)]` walks `src/` when the crate compiles. It follows field assigns, `if` / `match` arms, and helpers in the same file. Any path that **definitely** leaves `kind = "hi"` and `name = None` is a `compile_error!`.
 
 ```rust
-fn compute_hi(mut m: Msg) -> Msg {
+fn greet(mut m: Msg) -> Msg {
     m.kind = "hi".into();
-    m.name = None;           // Fail: hi ⇒ name defined
+    m.name = None;          // cargo build fails: name is required when kind is hi
     m
 }
 
 fn for_kind(mut m: Msg) -> Msg {
     if m.kind == "hi" {
-        m.name = None;       // Fail on this arm
-        return m;
+        m.name = Some("Ada".into());
+        return m;           // this arm is ok
     }
-    helper(m)                // else: kind is not hi — name None is fine
-}
-
-fn helper(mut m: Msg) -> Msg {
-    m.name = None;
+    m.name = None;          // else: kind is not hi — ok
     m
 }
 
-fn sneak(mut m: Msg) -> Msg {
-    helper(do_m(m))          // follow: do_m writes hi + None → Fail here too
+fn via_helper(m: Msg) -> Msg {
+    bad(m)                  // still fails: bad() writes hi + None
 }
 
-fn do_m(mut m: Msg) -> Msg {
+fn bad(mut m: Msg) -> Msg {
     m.kind = "hi".into();
     m.name = None;
     m
 }
 ```
 
-`#[derive(Schema)]` Unfolds `{crate}/src` at expand time. A Known-illegal photo is `compile_error!` — `cargo build` is the check. Path-split: do not union `if` arms. Follow enters callees (same file, depth 8). `#[except("why")]` mutes **that fn as a site**; follow from other sites still enters it.
-
-Hand photo (tests / live JSON) is the same Eval:
+Mute one function (tests / fixtures) with a reason. Other functions that call it are still checked.
 
 ```rust
-eval_schema(&Msg::conformance_schema(),
-    &ValueCtx::default().lit("kind", "hi").absent("name"),
-    None)
+#[conformance_macros::except("fixture for the illegal case")]
+fn compute_hi(mut m: Msg) -> Msg {
+    m.kind = "hi".into();
+    m.name = None;
+    m
+}
 ```
 
-Unknown / missing keys are Undecidable, not Fail.
+### Runtime
 
-## Complex domains live in the consumer
-
-The kernel does not grow `uuid` / `eci` arms. A refine is `a → Score`. Lift picks `a` from the slot (`String`, each of a list, `Absent | T`). Ampere (or this test crate) owns the filter:
+Same rules, on values you already have (JSON, a test, a live struct you copied into a context):
 
 ```rust
-use conformance_lang::{refine, Refine};
+use conformance_lang::{eval_schema, ValueCtx};
 
-fn eci() -> Refine<str> {
-    refine(|s| s.chars().count() == 2 && s.chars().all(|c| c.is_ascii_digit()))
-}
+let schema = Msg::conformance_schema();
 
-fn uuid() -> Refine<str> {
-    refine(|s| s.len() == 36 /* … */)
-}
+let bad = ValueCtx::default().lit("kind", "hi").absent("name");
+assert!(!eval_schema(&schema, &bad, None).ok());
 
-#[derive(Schema)]
-struct RReq {
-    #[enum_("2.0.0", "2.1.0", "2.2.0", "2.3.1")]
-    message_version: String,
-
-    #[refine(eci)]
-    eci: Option<String>,
-
-    #[refine(uuid)]
-    three_ds_server_trans_id: String,
-
-    /// This slot only — same refine, no named fn.
-    #[refine(|s| s.chars().count() == 2)]
-    interaction_counter: String,
-
-    /// Photo: leftover 09/10 illegal on 2.2. Rewrite: the edit at `=`.
-    #[enum_("01", "02", "03", "04", "05", "06", "07", "08", "09", "10")]
-    #[when(message_version != "2.3.1" && "09" or "10", rewrite "06")]
-    #[when(message_version != "2.3.1", one_of("01", "03", "04", "05", "06", "07", "08"))]
-    challenge_cancel: Option<String>,
-}
+let good = ValueCtx::default().lit("kind", "hi").lit("name", "Ada");
+assert!(eval_schema(&schema, &good, None).ok());
 ```
 
-`#[refine(eci)]` is `let r: Refine<str> = eci()` then erase to `Invariant` on the Schema. Option peels to `or_absent`. Expand-time `compile_error!` only scores **data** (`one_of`, `defined`, …). A domain closure is runtime Eval.
+`.lit` is a known string. `.absent` is an explicit `None`. A field you omit is skipped, not treated as `None`.
 
-A Schema struct is walked by default (`report.code`). `#[leaf]` opts out. Sums are not nested Schemas.
+## More on the same struct
+
+Allowed strings: `#[enum_("hi", "bye")]`.  
+`Option<T>` may be missing unless `#[required_if(...)]` says otherwise.  
+A custom string check is a closure you own:
 
 ```rust
-#[derive(Schema)]
-struct Erro {
-    #[enum_("01", "02")]
-    code: String,
-}
-
-#[derive(Schema)]
-struct Wrap {
-    report: Option<Erro>,   // walks Erro; Absent skips
-}
+#[refine(|s| s.chars().count() == 2 && s.chars().all(|c| c.is_ascii_digit()))]
+eci: Option<String>,
 ```
 
-## Use from GitHub
-
-```toml
-conformance_lang = { git = "https://github.com/dipanshuhappy/conformance_tiny_ir", package = "conformance_lang" }
-conformance_macros = { git = "https://github.com/dipanshuhappy/conformance_tiny_ir", package = "conformance_macros" }
-```
-
-Pin `rev` when you want a freeze. You need `conformance_lang` if you call `eval_schema` / `refine` yourself; `#[derive(Schema)]` needs the macros crate.
+Or a named function: `fn eci() -> Refine<str> { refine(|s| …) }` then `#[refine(eci)]`. Nested structs that also `#[derive(Schema)]` are checked field-by-field (`report.code`). Put `#[leaf]` on a field to skip that.
 
 ```bash
-cargo build          # Fail → compile_error
+cargo build                 # illegal construction → compile_error
 cargo test -p conformance_lang
 ```
-
-## Crates
-
-- `conformance_lang` — IR, Observe, Unfold, Eval
-- `conformance_macros` — `#[derive(Schema)]`, `#[transition]`, `#[except]`
-
-Law: [DESIGN.md](DESIGN.md).
