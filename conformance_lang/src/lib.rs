@@ -21,9 +21,8 @@ pub use ir::{
 };
 pub use observe::{observe, Fact};
 pub use stdlib::{
-    absent, all, at, defined, nested, one_of, or_absent, pred_defined, pred_eq, pred_in, pred_not,
-    refine,
-    refine_on, rewrite, shape, unique, when, width,
+    absent, all, at, defined, matches, nested, one_of, or_absent, pred_defined, pred_eq, pred_in,
+    pred_not, refine, refine_on, rewrite, shape, unique, when, width,
 };
 pub use unfold::{eval_crate, eval_tree, eval_unfold, eval_unfold_named, unfold, Observation};
 

@@ -55,7 +55,8 @@ String values of that type (`one_of`, domain `eci` / `uuid`) are the common case
 ```text
 one_of xs s           =  s ∈ xs                 -- Refine String (data)
 refine (|x|)          =  check x                -- Refine a; lift picks a
-uuid / eci            =  refine (|s|)           -- Ampere (or tests), not this crate
+matches p             =  refine (full_match p)  -- generic string sugar; compiled once
+uuid / eci            =  matches(data) or refine (|s|) -- names stay outside the kernel
 all                   =  And of two refines
 Single                =  Refine (this ctor)     -- not a list
 ```
@@ -75,6 +76,8 @@ apply _ Unknown     = Undecidable
 **Map / filter / fold:** the transition `f` is map (`σ → σ'`). Observe is fold (photo). Refine / `when` / Eval are filter. `rewrite` is a filter on **one write**, not a refine and not the map.
 
 **Domain refines:** `fn eci() -> Refine<str>`. `#[refine(eci)]` is `let r: Refine<str> = eci()` (lift after Option peel) then **erase** to `Invariant` on the Schema. This slot only = `#[refine(|x|)]`, same type. Expand-time `compile_error!` only `apply`s **data** (`one_of`, `defined`, …). A domain check is runtime Eval.
+
+**Regex sugar:** `matches(pattern)` compiles `pattern` once when Schema is built and returns `Refine<str>`. Matching is against the whole string. An invalid pattern is a Schema-construction error; it never becomes `Fail`. YAML `matches:` lowers here. This is sugar, not an `Invariant` arm.
 
 Not in the kernel: `shape` as `#`, `#[len]` as UUID (wire), rustc `typeof` as *P*.
 

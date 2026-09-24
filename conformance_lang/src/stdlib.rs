@@ -29,6 +29,16 @@ pub fn refine(check: impl Fn(&str) -> bool + Send + Sync + 'static) -> Refine<st
     refine_on::<str>(check)
 }
 
+/// Full-string regular-expression sugar for `Refine str`.
+///
+/// The pattern is compiled once when the Schema is built. It is wrapped in
+/// `\A(?:...)\z`, so callers cannot accidentally request a substring match.
+pub fn matches(pattern: &str) -> Result<Refine<str>, regex::Error> {
+    let pattern = format!(r"\A(?:{pattern})\z");
+    let regex = regex::Regex::new(&pattern)?;
+    Ok(refine(move |value| regex.is_match(value)))
+}
+
 /// `Refine a` when lift / the caller names `a` (`refine_on::<i32>(|n| …)`).
 pub fn refine_on<A: crate::absval::PhotoArg + ?Sized>(
     check: impl Fn(&A) -> bool + Send + Sync + 'static,

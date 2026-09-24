@@ -33,7 +33,7 @@ This repo is the **language**. Ampere and recon are consumers. The law is [DESIG
 - **Primitives first.** Ask what the thing *is* (photo vs rewrite, sit vs move, Observe vs Eval). Kill a name that is not a law.
 - **Same photo.** `when(P, I)` narrows the ending picture. `rewrite` is the only old/new, scored at `=`.
 - **Lift over attrs.** Default walk a Schema struct. `#[leaf]` opts out. Sums are Refine, not nested Schema. Do not invent `#[nested]` as the product.
-- **Domain stays in the consumer.** `refine(|x|)` / `fn eci() -> Refine<str>`. This crate does not own uuid/eci/regex.
+- **Domain names stay in the consumer.** `refine(|x|)` / `fn eci() -> Refine<str>`. Generic full-string `matches(pattern)` sugar may build that refine; this crate does not own named uuid/eci rules.
 - **Honest leftovers.** Do not list a closed hole as unsolved. Do not “fix” Unfold-undecidable IDs by pretending `String::new` is a photo.
 - **Do not make the consumer prettier for the walker.** `map(for_protocol)` may stay Unknown. Photo is filled by live / fingers.
 - **Rename when the name is the bug** (`forAll` → eval). Remove the old name from code *and* plan.
@@ -64,6 +64,6 @@ This repo is the **language**. Ampere and recon are consumers. The law is [DESIG
 - Coding during `think` / `don't code`
 - `step` / `phase` / `forAll` / rustc `typeof` as *P*
 - Fail on Unknown or missing key
-- Kernel `uuid` / `regex` / `chars`
+- Kernel `uuid` / `regex` / `chars` arms (generic `matches` must erase to `Refine`)
 - DESIGN Next lists nested walk, list `one_of`, unique, refine, field-follow as future
 - A green test that never saw the illegal literal

@@ -6,6 +6,7 @@ license.workspace = true
 description = "Tiny conformance IR: Schema / Field / Invariant / Predicate / Compose / Eval"
 
 [dependencies]
+regex = "1"
 thiserror = "1"
 syn = { version = "2", features = ["full"] }
 

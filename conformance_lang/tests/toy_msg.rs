@@ -1,7 +1,7 @@
 use conformance_lang::{
-    all, eval_schema, msg_toy_schema, nested, observe, one_of, or_absent, pred_eq, pred_in, refine,
-    shape, unique, when, AbsVal, Fact, Field, FindingKind, Form, Invariant, Locator, Predicate,
-    Refine, Schema, ValueCtx,
+    all, eval_schema, matches as matches_text, msg_toy_schema, nested, observe, one_of, or_absent,
+    pred_eq, pred_in, refine, shape, unique, when, AbsVal, Fact, Field, FindingKind, Form,
+    Invariant, Locator, Predicate, Refine, Schema, ValueCtx,
 };
 
 /// Domain crate (Ampere would own these). Typed `Refine<str>`; Schema erases.
@@ -513,6 +513,36 @@ fn domain_uuid_is_refine_closure() {
             .fails()
             .any(|f| f.field == "id")
     );
+}
+
+#[test]
+fn matches_is_full_string_refine_sugar() {
+    let schema = slot("eci", matches_text("[0-9]{2}").expect("valid regex"));
+    assert!(eval_schema(&schema, &ValueCtx::default().lit("eci", "05"), None).ok());
+    assert!(
+        eval_schema(&schema, &ValueCtx::default().lit("eci", "x05"), None)
+            .fails()
+            .any(|f| f.field == "eci")
+    );
+
+    let unknown = eval_schema(&schema, &ValueCtx::default().unknown("eci"), None);
+    assert!(unknown.ok(), "Unknown is not known-illegal");
+    assert!(unknown
+        .findings
+        .iter()
+        .any(|f| f.kind == FindingKind::Undecidable && f.field == "eci"));
+
+    let unobserved = eval_schema(&schema, &ValueCtx::default(), None);
+    assert!(unobserved.ok(), "unobserved is not absent or known-illegal");
+    assert!(unobserved
+        .findings
+        .iter()
+        .any(|f| f.kind == FindingKind::Undecidable && f.field == "eci"));
+}
+
+#[test]
+fn matches_rejects_an_invalid_pattern_when_schema_is_built() {
+    assert!(matches_text("[").is_err());
 }
 
 #[test]
