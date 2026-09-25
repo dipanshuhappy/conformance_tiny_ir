@@ -19,7 +19,7 @@ pub use ir::{
     Compose, Field, Form, Invariant, Locator, Predicate, Refine, RefineFn, Rewrite, Schema,
     ValueCtx, WireMeta,
 };
-pub use observe::{observe, Fact};
+pub use observe::{observe, Fact, WireFragment};
 pub use stdlib::{
     absent, all, at, defined, matches, nested, one_of, or_absent, pred_defined, pred_eq, pred_in,
     pred_not, refine, refine_on, rewrite, shape, unique, when, width,

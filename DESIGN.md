@@ -132,6 +132,14 @@ Observe = **fold of updates** `M = ValueCtx → ValueCtx` (last write wins):
 
 Last write wins: a later `.lit` / `.absent` / … on a field drops its `exclude`. That is the ending picture. Without `rewrite` there is no old/new — `when` / `required_if` see that one photo. `#[when(P, rewrite I)]` is what opens the pair: P on **pre**, I on the write, scored **at the `=`**.
 
+Sequential wire construction is a composable Observe fragment. `empty` has
+extent zero; `emit(field, n)` has extent `n`; `a <> b` shifts `b` by `a`'s
+extent and adds the extents. Seating the finished fragment at an origin emits
+the existing absolute `.with_wire` updates. This is associative, so a callee can
+be summarized before its caller places it. It is Observe geometry, not a new
+Invariant and not a stack language. Branches keep separate fragments and are
+evaluated separately.
+
 `observe(schema, read)` folds `schema.fields`. `read` uses **locators**; Eval still names Schema fields. `M` does not depend on Schema.
 
 **Walk ⊂ Observe.** A walk is one way to emit `M`s. Layout JSON and live values are Observe with **no** AST walk.
@@ -140,7 +148,7 @@ Last write wins: a later `.lit` / `.absent` / … on a field drops its `exclude`
 |---|---|---|
 | Fingers | tests | `.lit` / `.absent` / `.with_wire` |
 | Live | JSON / struct after a transition | values |
-| Layout | `tracs_layout.json` | `.with_wire` — **not** a rewrite of spec YAML |
+| Layout | `tracs_layout.json` | `.with_wire`, or sequential `WireFragment` lowered to `.with_wire` — **not** a rewrite of spec YAML |
 | Unfold | `self` / `m` rewrite + literal `if`s; follow callees with Known writes | values on **that arm** |
 | Phone book | `compute_field` → helper | per-field literals (recon-style; optional) |
 
@@ -195,7 +203,7 @@ enforce_layout!   →  driver         -- cargo build; same job as #[derive(Schem
 
 Green in recon means red is reachable (`mutate.py`). Same beauty: a check that cannot fail is not a check. Silence on the wire is not permission when the document enumerated the domain.
 
-What the plugin has that this crate does not: spec generation, layout-file Observe, phone book, citations, latent vs error, mutate. What this crate has that the plugin does not: path-split Unfold, photo `when` + `rewrite`, default nested walk, JSON messages, `Refine a`. Port means **reuse the IR**, not copy `check.rs` check-ids.
+What the plugin has that this crate does not: spec generation, layout-file Observe, phone book, citations, latent vs error, mutate. What this crate has that the plugin does not: path-split Unfold, sequential wire fragments, photo `when` + `rewrite`, default nested walk, JSON messages, `Refine a`. Port means **reuse the IR**, not copy `check.rs` check-ids.
 
 ---
 
@@ -205,8 +213,9 @@ What the plugin has that this crate does not: spec generation, layout-file Obser
 2. **Unfold** — AST Observe: `self`/`m` rewrite, path split, field-follow, Unobserved ≠ Fail.
 3. **Law in sugar** — `when(P, I)` photo; `when(P, rewrite I)` edit; tiling; `refine`; `unique`; list `one_of` each.
 4. **Nested** — `AbsVal::Record`; lift walks a Schema struct (`report.code`). `#[leaf]` opts out. Sums / leaves / structs without Schema are not walked.
+5. **Recon YAML** — all legality is under generated `schemas`: locators plus `one_of` / `matches` / `defined` / `unique` / `when`, transitions as `rewrites`, and consumer predicate names as `refine`. Recon resolves those names to `Refine a`; they are not kernel arms. Layout, runtime config and Rust sources are Observe backends for the same Eval.
 
-**Next (honest):** `#[when(P, shape(scalar\|array))]` (auth 2.2 one string / 2.3.1 list); `#[unique]`; AReq `eq_field` (joined photo); live Observe; layout-file reader; phone book; plugin speaking this IR. Not kernel: `shape` as `#`, rustc `typeof` as *P*, leftover-12 as `one_of("09")` (that is not the 2.2 set).
+**Next (honest):** `#[when(P, shape(scalar\|array))]` (auth 2.2 one string / 2.3.1 list); `#[unique]`; AReq `eq_field` (joined photo); live Observe; a language-owned layout-file reader and phone book. Not kernel: `shape` as `#`, rustc `typeof` as *P*, leftover-12 as `one_of("09")` (that is not the 2.2 set).
 
 Not in scope unless we reopen: Lean / ∀ `for_protocol`, rewriting Ampere `map()`.
 

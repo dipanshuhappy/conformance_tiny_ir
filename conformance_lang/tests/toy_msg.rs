@@ -172,6 +172,53 @@ fn geometry_at_width() {
 }
 
 #[test]
+fn sequential_wire_fragments_fold_to_absolute_geometry() {
+    use conformance_lang::{at, eval_schema, width, Field, Locator, Schema, WireFragment};
+
+    let schema = Schema {
+        name: "E1".into(),
+        width: Some(32),
+        fields: vec![
+            Field {
+                name: "card_number".into(),
+                locator: Locator::Wire("card_number".into()),
+                invariants: vec![at(1), width(19)],
+                wire: None,
+            },
+            Field {
+                name: "transaction_code".into(),
+                locator: Locator::Wire("transaction_code".into()),
+                invariants: vec![at(20), width(2)],
+                wire: None,
+            },
+            Field {
+                name: "source_number".into(),
+                locator: Locator::Wire("source_number".into()),
+                invariants: vec![at(22), width(11)],
+                wire: None,
+            },
+        ],
+        rewrites: vec![],
+    };
+
+    let trace = WireFragment::emit("card_number", 19)
+        .concat(WireFragment::emit("transaction_code", 2))
+        .concat(WireFragment::emit("source_number", 11));
+    assert_eq!(trace.extent(), 32);
+    assert!(eval_schema(&schema, &trace.observe(1), None).ok());
+
+    let illegal = WireFragment::emit("transaction_code", 2)
+        .concat(WireFragment::emit("card_number", 19))
+        .concat(WireFragment::emit("source_number", 11));
+    let report = eval_schema(&schema, &illegal.observe(1), None);
+    assert!(!report.ok());
+    assert!(report.fails().any(|finding| {
+        finding.message.contains("Invariant at(20) failed")
+            && finding.message.contains("transaction_code")
+    }));
+}
+
+#[test]
 fn tiling_overlap_fails() {
     use conformance_lang::{at, width};
 
